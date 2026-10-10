@@ -1,1 +1,221 @@
-
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>街机格斗：第一战</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#101522;color:white;font-family:Arial,sans-serif;overflow:hidden;touch-action:none}
+#game{display:block;width:100vw;height:68vh;background:#263451;image-rendering:pixelated}
+.top{height:32px;display:flex;align-items:center;justify-content:center;font-weight:bold;color:#ffd36a}
+.hud{display:flex;align-items:center;gap:8px;padding:5px 10px;height:54px;background:#111827}
+.side{flex:1;min-width:0}
+.name{font-size:13px;font-weight:bold;margin-bottom:5px}
+.bar{height:15px;border:2px solid white;background:#3a202b;overflow:hidden}
+.fill{height:100%;width:100%;background:linear-gradient(90deg,#42f58d,#c9f85b);transition:width .12s}
+#p2bar{background:linear-gradient(90deg,#ffda61,#ff653d)}
+#timer{font-size:23px;font-weight:900;color:#ffe16b;min-width:38px;text-align:center}
+#msg{text-align:center;height:28px;font-size:14px;color:#ffe17a;padding:5px}
+.controls{display:flex;justify-content:space-between;align-items:center;padding:4px 12px;gap:8px;height:calc(32vh - 114px);min-height:105px;background:#111827}
+.group{display:flex;align-items:center;gap:7px}
+button{border:2px solid #687b9e;background:#293a59;color:white;border-radius:14px;font-size:15px;font-weight:bold;min-width:52px;height:58px;touch-action:none;box-shadow:0 4px 0 #111827}
+button:active,.pressed{background:#526c9b;transform:translateY(2px);box-shadow:0 2px 0 #111827}
+.attack{background:#8d303c;border-color:#e57a79;min-width:58px}
+#restart{height:29px;min-width:90px;font-size:12px;border-radius:8px}
+@media(orientation:landscape){
+ #game{height:calc(100vh - 100px);width:76vw;float:left}
+ .top{height:24px}
+ .hud{height:52px}
+ .controls{height:calc(100vh - 76px);min-height:0;flex-direction:column;justify-content:center}
+ #msg{height:24px}
+}
+</style>
+</head>
+<body>
+<div class="top">★ 街机格斗 · 第一战 ★</div>
+<div class="hud">
+ <div class="side"><div class="name">PLAYER 1 · 赤焰</div><div class="bar"><div id="p1bar" class="fill"></div></div></div>
+ <div id="timer">99</div>
+ <div class="side"><div class="name" style="text-align:right">CPU · 影狼</div><div class="bar"><div id="p2bar" class="fill"></div></div></div>
+</div>
+<canvas id="game" width="800" height="430"></canvas>
+<div id="msg">击败对手！用方向键靠近敌人</div>
+<div class="controls">
+ <div class="group">
+  <button data-key="left">◀</button><button data-key="right">▶</button><button data-key="jump">跳跃</button>
+ </div>
+ <div class="group">
+  <button class="attack" data-key="punch">拳击</button><button class="attack" data-key="kick">踢腿</button>
+ </div>
+ <button id="restart">重新开始</button>
+</div>
+<script>
+(()=>{
+const c=document.getElementById('game'),ctx=c.getContext('2d');
+ctx.imageSmoothingEnabled=false;
+const $=id=>document.getElementById(id);
+const keys={left:false,right:false,jump:false,punch:false,kick:false};
+let p,e,frame=0,time=99,ended=false,last=0,cool=0,shake=0;
+function fighter(x,name,color,skin,flip){
+ return {x,y:315,vx:0,vy:0,hp:100,name,color,skin,flip,
+  face:1,ground:true,attack:0,kind:'',hit:false,stun:0,walk:0};
+}
+function reset(){
+ p=fighter(210,'赤焰','#ed493e','#f8bd85',false);
+ e=fighter(590,'影狼','#4c83ff','#d9a078',true);
+ p.face=1;e.face=-1;frame=0;time=99;ended=false;cool=0;shake=0;
+ $('msg').textContent='击败对手！用方向键靠近敌人';
+ $('restart').textContent='重新开始';updateHud();
+}
+function updateHud(){
+ $('p1bar').style.width=Math.max(0,p.hp)+'%';
+ $('p2bar').style.width=Math.max(0,e.hp)+'%';
+ $('timer').textContent=time;
+}
+function attack(a,kind){
+ if(ended||a.attack>0||a.stun>0)return;
+ a.attack=kind==='punch'?18:27;a.kind=kind;a.hit=false;
+}
+function damage(a,b,kind){
+ let range=kind==='kick'?104:76;
+ if(Math.abs(a.x-b.x)>range||Math.abs(a.y-b.y)>65)return;
+ b.hp=Math.max(0,b.hp-(kind==='kick'?12:8));
+ b.stun=12;b.vx=a.face*5;shake=5;
+}
+function playerUpdate(){
+ p.vx=0;
+ if(!ended&&p.stun<=0){
+  if(keys.left)p.vx=-3.6;
+  if(keys.right)p.vx=3.6;
+  if(keys.jump&&p.ground){p.vy=-10.5;p.ground=false}
+  if(keys.punch)attack(p,'punch');
+  if(keys.kick)attack(p,'kick');
+ }
+}
+function cpuUpdate(){
+ if(ended||e.stun>0)return;
+ let d=p.x-e.x,ad=Math.abs(d);e.face=d<0?-1:1;
+ if(ad>76)e.vx=Math.sign(d)*2.0;
+ else {e.vx=0;if(cool<=0){attack(e,Math.random()<.6?'punch':'kick');cool=42+Math.random()*35}}
+ if(ad<120&&cool%80===0&&e.ground){e.vy=-7;e.ground=false}
+}
+function move(a){
+ a.x+=a.vx;
+ if(a.stun>0)a.stun--;
+ if(a.attack>0){
+  a.attack--;
+  if(!a.hit&&a.attack=== (a.kind==='kick'?19:12)){
+   let b=a===p?e:p;
+   if(!ended)damage(a,b,a.kind);
+   a.hit=true;
+  }
+ }
+ a.vy+=.48;a.y+=a.vy;
+ if(a.y>=315){a.y=315;a.vy=0;a.ground=true}
+ a.x=Math.max(35,Math.min(765,a.x));
+ a.walk+=Math.abs(a.vx)*.12;
+ if(a.vx!==0&&a.stun===0)a.face=a===p?(e.x>p.x?1:-1):(p.x>e.x?1:-1);
+}
+function rect(x,y,w,h,col){ctx.fillStyle=col;ctx.fillRect(Math.round(x),Math.round(y),w,h)}
+function drawFighter(a){
+ ctx.save();ctx.translate(Math.round(a.x),Math.round(a.y));ctx.scale(a.face,1);
+ let moving=Math.abs(a.vx)>.1&&a.ground?Math.sin(a.walk)*5:0;
+ // 阴影
+ ctx.fillStyle='#10172699';ctx.beginPath();ctx.ellipse(0,3,35,7,0,0,Math.PI*2);ctx.fill();
+ // 腿部
+ rect(-20, -40+moving,15,25,'#202b42');
+ rect(5,-40-moving,15,25,'#202b42');
+ rect(-24,-19+moving,22,7,'#f0d7ba');
+ rect(3,-19-moving,24,7,'#f0d7ba');
+ // 身体和腰带
+ rect(-22,-78,44,40,a.color);
+ rect(-24,-45,48,7,'#f4d65a');
+ rect(-15,-74,8,24,'#ffffff35');
+ // 手臂攻击动画
+ let reach=a.attack>0?(a.kind==='kick'?5:27):0;
+ rect(13,-73,14+reach,12,a.color);
+ rect(24+reach,-72,10,10,a.skin);
+ rect(-28,-73,13,12,a.color);
+ // 头
+ rect(-17,-108,34,30,a.skin);
+ rect(-20,-112,37,12,a.color);
+ rect(4,-98,7,5,'#22232e');
+ rect(-13,-88,22,4,'#713e36');
+ // 头巾
+ rect(-17,-113,35,6,'#f7db61');
+ if(a.stun>0&&frame%6<3)rect(-23,-115,48,78,'#ffffff55');
+ // 踢腿
+ if(a.attack>0&&a.kind==='kick'){
+  rect(9,-42,43,12,a.skin);rect(43,-44,15,15,'#f4d65a');
+ }
+ ctx.restore();
+}
+function background(){
+ let g=ctx.createLinearGradient(0,0,0,430);
+ g.addColorStop(0,'#18233f');g.addColorStop(1,'#68799a');
+ ctx.fillStyle=g;ctx.fillRect(0,0,800,430);
+ // 月光和城市剪影
+ rect(625,40,48,48,'#f4dca1');
+ for(let i=0;i<15;i++){
+  let x=i*59-5,h=75+(i*37%100);
+  rect(x,255-h,48,h,'#26334c');
+  for(let j=0;j<3;j++)for(let k=0;k<Math.floor(h/20);k++)
+   if((i+j+k)%3!==0)rect(x+7+j*12,270-h+k*19,4,7,'#f5ce7855');
+ }
+ rect(0,278,800,152,'#333e55');
+ rect(0,315,800,6,'#e3b86b');
+ for(let i=0;i<800;i+=32)rect(i,321,2,109,'#ffffff09');
+ rect(0,415,800,15,'#1a2131');
+}
+function draw(){
+ ctx.save();
+ if(shake>0){ctx.translate((Math.random()-.5)*shake,(Math.random()-.5)*shake);shake*=.7}
+ background();drawFighter(p);drawFighter(e);
+ ctx.restore();
+ // 中央提示
+ if(ended){
+  rect(190,130,420,100,'#101522dd');
+  ctx.textAlign='center';ctx.fillStyle='#ffe16b';ctx.font='bold 34px Arial';
+  ctx.fillText(p.hp===e.hp?'平局！':p.hp>e.hp?'YOU WIN!':'CPU WINS!',400,174);
+  ctx.fillStyle='white';ctx.font='18px Arial';ctx.fillText('点击重新开始再战一局',400,207);
+ }
+}
+function tick(){
+ frame++;if(cool>0)cool--;
+ if(!ended){
+  playerUpdate();cpuUpdate();move(p);move(e);
+  if(frame%60===0){time=Math.max(0,time-1);updateHud()}
+  if(p.hp<=0||e.hp<=0||time<=0){
+   ended=true;
+   $('msg').textContent=p.hp===e.hp?'平局！':p.hp>e.hp?'胜利！赤焰获胜！':'挑战失败，再来一次！';
+   $('restart').textContent='再战一局';
+  }
+  updateHud();
+ }
+ draw();requestAnimationFrame(tick);
+}
+function bindButton(b){
+ const k=b.dataset.key;
+ const down=ev=>{ev.preventDefault();keys[k]=true;b.classList.add('pressed')};
+ const up=ev=>{ev.preventDefault();keys[k]=false;b.classList.remove('pressed')};
+ b.addEventListener('pointerdown',down);
+ b.addEventListener('pointerup',up);
+ b.addEventListener('pointercancel',up);
+ b.addEventListener('lostpointercapture',up);
+}
+document.querySelectorAll('[data-key]').forEach(bindButton);
+$('restart').addEventListener('click',reset);
+window.addEventListener('keydown',ev=>{
+ const map={ArrowLeft:'left',ArrowRight:'right',ArrowUp:'jump',KeyJ:'punch',KeyK:'kick'};
+ if(map[ev.code]){keys[map[ev.code]]=true;ev.preventDefault()}
+});
+window.addEventListener('keyup',ev=>{
+ const map={ArrowLeft:'left',ArrowRight:'right',ArrowUp:'jump',KeyJ:'punch',KeyK:'kick'};
+ if(map[ev.code])keys[map[ev.code]]=false;
+});
+reset();requestAnimationFrame(tick);
+})();
+</script>
+</body>
+</html>
